@@ -34,6 +34,9 @@ module.exports = {
         },
         hot: true,
         open: true,
+        https: true,
+        host: '0.0.0.0',
+        allowedHosts: 'all',
     },
     externals: {
         three: 'THREE',
