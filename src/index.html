@@ -5,12 +5,20 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>AR.js with Three.js Demo</title>
-        <link rel="stylesheet" href="style.css">
+        <style>
+            body {
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+        <!-- Load Three.js r127 first (compatible with AR.js 3.4.x) -->
+        <script src="https://cdn.jsdelivr.net/npm/three@0.127.0/build/three.min.js"></script>
+        <!-- Load AR.js THREEx extension -->
+        <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.5/three.js/build/ar-threex.min.js"></script>
     </head>
 
     <body>
         <div id="container"></div>
-        <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar.js"></script>
     </body>
 
 </html>

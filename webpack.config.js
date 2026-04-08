@@ -35,4 +35,7 @@ module.exports = {
         hot: true,
         open: true,
     },
+    externals: {
+        three: 'THREE',
+    },
 };
