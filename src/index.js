@@ -8,8 +8,29 @@ let hitTestSource = null;
 let hitTestSourceRequested = false;
 let xrSession = null;
 let deferredInstallPrompt = null;
+let arEngine = 'webxr';
+let eightWallLoadPromise = null;
+let eightWallStarted = false;
+let fallbackGroundPlane = null;
+let fallbackRaycaster = null;
+let fallbackPlacementPoint = null;
 
 const placedObjects = [];
+const EIGHT_WALL_SCRIPTS = [
+    {
+        src: 'https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js',
+        id: 'xrextras-script'
+    },
+    {
+        src: 'https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js',
+        id: 'landing-page-script'
+    },
+    {
+        src: 'https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js',
+        id: 'xr8-engine-script',
+        attrs: { 'data-preload-chunks': 'slam' }
+    }
+];
 
 const COLORS = {
     red: 0xd93a31,
@@ -64,28 +85,14 @@ let instructionsTimer = null;
 
 init();
 
-function isIOS() {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
 async function init() {
     registerServiceWorker();
     setupInstallButton();
-    setupScene();
     setupStartButton();
     setupMicButton();
     setupClearButton();
     setupInfoButton();
     updateObjectCount();
-
-    if (isIOS()) {
-        showNotSupported(
-            'iOS does not support WebXR AR yet. Install the PWA for the shell, then use Chrome on Android for AR placement.',
-            true
-        );
-        return;
-    }
 
     const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
 
@@ -95,22 +102,30 @@ async function init() {
     }
 
     if (!navigator.xr) {
-        showNotSupported('WebXR is not available in this browser. Use Chrome on an ARCore-capable Android device.');
+        enableEightWallFallback('WebXR is not available in this browser.');
         return;
     }
 
     try {
         const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
         if (!isARSupported) {
-            showNotSupported('Immersive AR is not supported. Confirm Google Play Services for AR is installed.');
+            enableEightWallFallback('Immersive WebXR AR is not supported on this device.');
             return;
         }
     } catch (error) {
-        showNotSupported('Error checking AR support: ' + error.message);
+        enableEightWallFallback('WebXR support check failed: ' + error.message);
         return;
     }
 
+    arEngine = 'webxr';
+    setupScene();
     statusEl.textContent = 'Ready to place AR objects';
+    startARBtn.disabled = false;
+}
+
+function enableEightWallFallback(reason) {
+    arEngine = '8thwall';
+    statusEl.textContent = `${reason} 8th Wall fallback is ready.`;
     startARBtn.disabled = false;
 }
 
@@ -146,7 +161,7 @@ function setupInstallButton() {
     });
 }
 
-function showNotSupported(reason, isIOSDevice = false) {
+function showNotSupported(reason) {
     startARBtn.classList.add('hidden');
     micBtn.classList.add('hidden');
     clearBtn.classList.add('hidden');
@@ -156,18 +171,7 @@ function showNotSupported(reason, isIOSDevice = false) {
     statusEl.textContent = 'AR is unavailable on this device';
 
     if (notSupportedReasonEl && reason) {
-        if (isIOSDevice) {
-            notSupportedReasonEl.innerHTML = `
-                <div class="ios-message">
-                    <p class="error-reason">${reason}</p>
-                    <p class="ios-suggestion">For full AR, open this app on <strong>Android Chrome</strong>.</p>
-                </div>
-            `;
-            const setupSteps = document.querySelector('.setup-steps');
-            if (setupSteps) setupSteps.style.display = 'none';
-        } else {
-            notSupportedReasonEl.innerHTML = `<p class="error-reason">${reason}</p>`;
-        }
+        notSupportedReasonEl.innerHTML = `<p class="error-reason">${reason}</p>`;
     }
 
     console.error('AR not supported:', reason);
@@ -186,14 +190,26 @@ function setupScene() {
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    configureRenderer();
+    container.appendChild(renderer.domElement);
+
+    addSceneLighting();
+    createReticle();
+    window.addEventListener('resize', onWindowResize);
+}
+
+function configureRenderer() {
+    if (!renderer) return;
+
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
-    renderer.xr.enabled = true;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
+}
 
+function addSceneLighting() {
     const ambientLight = new THREE.HemisphereLight(0xffffff, 0x8fb3ff, 1.6);
     ambientLight.position.set(0.5, 1, 0.25);
     scene.add(ambientLight);
@@ -202,9 +218,6 @@ function setupScene() {
     keyLight.position.set(2, 4, 3);
     keyLight.castShadow = true;
     scene.add(keyLight);
-
-    createReticle();
-    window.addEventListener('resize', onWindowResize);
 }
 
 function createReticle() {
@@ -234,12 +247,61 @@ function createReticle() {
     scene.add(reticle);
 }
 
+function createFallbackReticle() {
+    createReticle();
+    reticle.matrixAutoUpdate = true;
+    reticle.position.set(0, 0, -1.2);
+    reticle.quaternion.identity();
+    reticle.visible = true;
+    reticleVisible = true;
+}
+
+function setupFallbackPlacement() {
+    fallbackGroundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    fallbackRaycaster = new THREE.Raycaster();
+    fallbackPlacementPoint = new THREE.Vector3(0, 0, -1.2);
+
+    const shadowGeometry = new THREE.PlaneGeometry(2000, 2000);
+    shadowGeometry.rotateX(-Math.PI / 2);
+    const shadowMaterial = new THREE.ShadowMaterial({
+        opacity: 0.34,
+        transparent: true
+    });
+    const shadowPlane = new THREE.Mesh(shadowGeometry, shadowMaterial);
+    shadowPlane.receiveShadow = true;
+    scene.add(shadowPlane);
+}
+
+function updateFallbackReticle() {
+    if (arEngine !== '8thwall' || !camera || !reticle || !fallbackRaycaster) return;
+
+    fallbackRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const didIntersect = fallbackRaycaster.ray.intersectPlane(fallbackGroundPlane, fallbackPlacementPoint);
+
+    if (!didIntersect) {
+        const fallbackDirection = new THREE.Vector3();
+        camera.getWorldDirection(fallbackDirection);
+        fallbackPlacementPoint.copy(camera.position).add(fallbackDirection.multiplyScalar(1.4));
+        fallbackPlacementPoint.y = 0;
+    }
+
+    reticle.position.copy(fallbackPlacementPoint);
+    reticle.rotation.set(0, 0, 0);
+    reticle.visible = true;
+    reticleVisible = true;
+}
+
 function setupStartButton() {
     startARBtn.disabled = true;
     startARBtn.addEventListener('click', startAR);
 }
 
 async function startAR() {
+    if (arEngine === '8thwall') {
+        startEightWallAR();
+        return;
+    }
+
     try {
         xrSession = await navigator.xr.requestSession('immersive-ar', {
             requiredFeatures: ['hit-test'],
@@ -252,11 +314,7 @@ async function startAR() {
         await renderer.xr.setReferenceSpaceType('local');
         await renderer.xr.setSession(xrSession);
 
-        startARBtn.classList.add('hidden');
-        micBtn.classList.remove('hidden');
-        clearBtn.classList.remove('hidden');
-        infoBtn.classList.remove('hidden');
-        hideInstructions();
+        showActiveARControls();
         statusEl.textContent = 'Scan a surface, then speak an object';
 
         renderer.setAnimationLoop(render);
@@ -264,6 +322,148 @@ async function startAR() {
         console.error('Failed to start AR session:', error);
         statusEl.textContent = 'Failed to start AR: ' + error.message;
     }
+}
+
+async function startEightWallAR() {
+    if (eightWallStarted) return;
+
+    startARBtn.disabled = true;
+    statusEl.textContent = 'Loading 8th Wall AR engine...';
+
+    try {
+        await loadEightWallLibraries();
+        window.THREE = THREE;
+
+        const container = document.getElementById('container');
+        container.innerHTML = '';
+
+        const canvas = document.createElement('canvas');
+        canvas.id = 'camerafeed';
+        container.appendChild(canvas);
+
+        const modules = [
+            window.XR8.GlTextureRenderer.pipelineModule(),
+            window.XR8.Threejs.pipelineModule(),
+            window.XR8.XrController.pipelineModule(),
+            window.LandingPage.pipelineModule(),
+            window.XRExtras.FullWindowCanvas.pipelineModule(),
+            window.XRExtras.Loading.pipelineModule(),
+            window.XRExtras.RuntimeError.pipelineModule(),
+            createEightWallScenePipelineModule(),
+        ];
+
+        window.XR8.addCameraPipelineModules(modules);
+
+        const runConfig = { canvas };
+        if (window.XR8.XrConfig?.device) {
+            runConfig.allowedDevices = window.XR8.XrConfig.device().ANY;
+        }
+        window.XR8.run(runConfig);
+    } catch (error) {
+        console.error('8th Wall AR failed:', error);
+        showNotSupported('8th Wall fallback could not start: ' + error.message);
+    }
+}
+
+function loadEightWallLibraries() {
+    if (window.XR8 && window.XRExtras && window.LandingPage) {
+        return Promise.resolve();
+    }
+
+    if (eightWallLoadPromise) return eightWallLoadPromise;
+
+    window.THREE = THREE;
+
+    const xrReady = new Promise((resolve, reject) => {
+        if (window.XR8) {
+            resolve();
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            reject(new Error('Timed out while loading XR8'));
+        }, 20000);
+
+        window.addEventListener('xrloaded', () => {
+            window.clearTimeout(timeout);
+            resolve();
+        }, { once: true });
+    });
+
+    eightWallLoadPromise = EIGHT_WALL_SCRIPTS
+        .reduce((promise, script) => promise.then(() => loadScript(script)), Promise.resolve())
+        .then(() => xrReady)
+        .then(() => {
+            if (!window.XR8 || !window.XRExtras || !window.LandingPage) {
+                throw new Error('8th Wall libraries did not initialize');
+            }
+        });
+
+    return eightWallLoadPromise;
+}
+
+function loadScript({ src, id, attrs = {} }) {
+    const existing = document.getElementById(id);
+    if (existing) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.id = id;
+        script.crossOrigin = 'anonymous';
+
+        Object.entries(attrs).forEach(([name, value]) => {
+            script.setAttribute(name, value);
+        });
+
+        script.addEventListener('load', () => resolve(), { once: true });
+        script.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+        document.head.appendChild(script);
+    });
+}
+
+function createEightWallScenePipelineModule() {
+    return {
+        name: 'voxr-8thwall-scene',
+        onStart: ({ canvas }) => {
+            const xrScene = window.XR8.Threejs.xrScene();
+            scene = xrScene.scene;
+            camera = xrScene.camera;
+            renderer = xrScene.renderer;
+
+            configureRenderer();
+            addSceneLighting();
+            createFallbackReticle();
+            setupFallbackPlacement();
+
+            canvas.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+            window.XR8.XrController.updateCameraProjectionMatrix({
+                origin: camera.position,
+                facing: camera.quaternion
+            });
+
+            eightWallStarted = true;
+            showActiveARControls();
+            statusEl.textContent = '8th Wall AR ready. Aim at the floor, then speak an object.';
+        },
+        onUpdate: () => {
+            updateFallbackReticle();
+            animatePlacedObjects(performance.now());
+        },
+        onException: (error) => {
+            console.error('8th Wall runtime error:', error);
+            statusEl.textContent = '8th Wall runtime error: ' + error.message;
+        }
+    };
+}
+
+function showActiveARControls() {
+    startARBtn.classList.add('hidden');
+    startARBtn.disabled = false;
+    micBtn.classList.remove('hidden');
+    clearBtn.classList.remove('hidden');
+    infoBtn.classList.remove('hidden');
+    hideInstructions();
 }
 
 function onSessionEnd() {
@@ -475,7 +675,14 @@ function placeObject(color, objectType) {
     if (!reticle.visible) return;
 
     const object = createObject(color, objectType);
-    reticle.matrix.decompose(object.position, object.quaternion, object.scale);
+
+    if (arEngine === '8thwall') {
+        object.position.copy(reticle.position);
+        object.quaternion.copy(reticle.quaternion);
+    } else {
+        reticle.matrix.decompose(object.position, object.quaternion, object.scale);
+    }
+
     object.position.y += object.userData.groundOffset || 0.08;
     object.rotation.y += Math.random() * Math.PI * 2;
     initializeAnimationState(object);
@@ -767,6 +974,8 @@ function updateObjectCount() {
 }
 
 function onWindowResize() {
+    if (!camera || !renderer) return;
+
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
