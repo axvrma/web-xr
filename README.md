@@ -1,36 +1,46 @@
-# Voice AR Object Placer
+# VoxAR Studio
 
-A WebXR augmented reality app that lets you place 3D objects in the real world using voice commands. Point your camera at a surface, tap the mic, and say "red cube" or "blue sphere" to place objects that persist as you move around.
+An installable WebXR augmented reality studio that lets you place polished 3D objects in the real world using voice commands. Point your camera at a surface, tap the mic, and say "gray elephant", "blue bird", or "gold rocket" to place objects that persist as you move around.
 
 ## Features
 
 - **Surface Detection** - Automatically detects flat surfaces (tables, floors, walls)
-- **Voice Commands** - Place objects by speaking color + shape combinations
+- **Voice Commands** - Place objects by speaking color + object combinations
+- **Richer 3D Library** - Includes primitives, elephant, animated birds, flock, tree, rocket, and crystal
+- **PWA Support** - Manifest, install prompt, service worker caching, bundled Three.js, and native safe-area UI
 - **Persistent Objects** - Placed objects stay anchored in world space
 - **Real-time Feedback** - Visual reticle shows where objects will be placed
+- **Scene Controls** - Clear all placed objects from the UI or by saying "clear"
 
 ## Supported Voice Commands
 
-Speak a combination of **color** + **shape**:
+Speak a combination of **color** + **object**:
 
-| Colors | Shapes |
-|--------|--------|
+| Colors | Objects |
+|--------|---------|
 | red | cube |
 | blue | sphere |
 | green | cylinder |
 | yellow | cone |
-| orange | |
-| purple | |
-| white | |
-| black | |
-| pink | |
-| cyan | |
+| orange | elephant |
+| purple | bird |
+| white | birds / flock |
+| black | tree |
+| pink | rocket |
+| cyan | crystal |
+| teal | |
+| gold | |
+| silver | |
+| gray | |
 
 **Examples:**
 - "red cube"
 - "blue sphere"
-- "green cylinder"
-- "yellow cone"
+- "gray elephant"
+- "blue bird"
+- "gold rocket"
+- "teal crystal"
+- "clear"
 
 ## Requirements
 
@@ -99,19 +109,21 @@ Output is generated in the `dist/` folder.
 
 ## Tech Stack
 
-- **Three.js** (r152) - 3D rendering
+- **Three.js** (r152) - 3D rendering, bundled for PWA reliability
 - **WebXR Device API** - AR session and hit-testing
 - **Web Speech API** - Voice recognition
 - **Webpack 5** - Bundling and dev server
+- **Service Worker + Web App Manifest** - Installable app shell and offline cache
 
 ## Project Structure
 
 ```
 web-xr/
 ├── src/
-│   ├── index.html    # Main HTML with UI overlay
-│   ├── index.js      # App logic (WebXR, speech, 3D)
-│   └── style.css     # UI styling
+│   ├── index.html           # Main HTML with UI overlay
+│   ├── index.js             # App logic (WebXR, speech, 3D models)
+│   ├── style.css            # UI styling
+│   └── pwa/                 # Manifest, service worker, icon
 ├── webpack.config.js # Build configuration
 └── package.json      # Dependencies
 ```
@@ -154,7 +166,7 @@ web-xr/
 | "Page must be loaded over HTTPS" | Use the `https://` URL, not `http://` |
 | Security certificate warning | Tap "Advanced" → "Proceed" (safe for local dev) |
 | No reticle appearing | Point camera at a well-lit flat surface |
-| Voice not recognized | Speak clearly, try "red cube" or "blue sphere" |
+| Voice not recognized | Speak clearly, try "gray elephant" or "blue bird" |
 | iOS not working | WebXR AR is not supported on iOS Safari |
 
 ## License
