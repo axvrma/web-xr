@@ -8,6 +8,7 @@ An installable WebXR augmented reality studio that lets you place polished 3D ob
 - **Voice Commands** - Place objects by speaking color + object combinations
 - **Richer 3D Library** - Includes primitives, elephant, animated birds, flock, tree, rocket, and crystal
 - **PWA Support** - Manifest, install prompt, service worker caching, bundled Three.js, and native safe-area UI
+- **8th Wall Fallback** - Loads the 8th Wall Engine Binary when immersive WebXR AR is unavailable
 - **Persistent Objects** - Placed objects stay anchored in world space
 - **Real-time Feedback** - Visual reticle shows where objects will be placed
 - **Scene Controls** - Clear all placed objects from the UI or by saying "clear"
@@ -54,9 +55,9 @@ Speak a combination of **color** + **object**:
 - Same WiFi network for local development testing
 
 ### Not Supported
-- iOS Safari (Apple has not implemented WebXR AR)
-- Desktop browsers
-- Non-Chrome mobile browsers
+- In browsers without immersive WebXR, the app attempts to start the 8th Wall fallback.
+- 8th Wall fallback requires camera access, HTTPS, and network access to load the 8th Wall engine scripts.
+- If both WebXR and 8th Wall fail, the app shows the setup guidance screen.
 
 ## Getting Started
 
@@ -111,6 +112,7 @@ Output is generated in the `dist/` folder.
 
 - **Three.js** (r152) - 3D rendering, bundled for PWA reliability
 - **WebXR Device API** - AR session and hit-testing
+- **8th Wall Engine Binary** - Fallback SLAM/world tracking path for browsers without immersive WebXR
 - **Web Speech API** - Voice recognition
 - **Webpack 5** - Bundling and dev server
 - **Service Worker + Web App Manifest** - Installable app shell and offline cache
@@ -161,13 +163,13 @@ web-xr/
 
 | Issue | Solution |
 |-------|----------|
-| "WebXR API not available" | Use Chrome browser on Android |
-| "Immersive AR not supported" | Install Google Play Services for AR from Play Store |
+| "WebXR API not available" | The app will try 8th Wall fallback |
+| "Immersive AR not supported" | The app will try 8th Wall fallback; on Android, also install Google Play Services for AR for native WebXR |
 | "Page must be loaded over HTTPS" | Use the `https://` URL, not `http://` |
 | Security certificate warning | Tap "Advanced" → "Proceed" (safe for local dev) |
 | No reticle appearing | Point camera at a well-lit flat surface |
 | Voice not recognized | Speak clearly, try "gray elephant" or "blue bird" |
-| iOS not working | WebXR AR is not supported on iOS Safari |
+| iOS WebXR not working | Expected; the app uses 8th Wall fallback when available |
 
 ## License
 
