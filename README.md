@@ -8,7 +8,7 @@ An installable WebXR augmented reality studio that lets you place polished 3D ob
 - **Voice Commands** - Place objects by speaking color + object combinations
 - **Richer 3D Library** - Includes primitives, elephant, animated birds, flock, tree, rocket, and crystal
 - **PWA Support** - Manifest, install prompt, service worker caching, bundled Three.js, and native safe-area UI
-- **8th Wall Fallback** - Loads the 8th Wall Engine Binary when immersive WebXR AR is unavailable
+- **Unified Mobile AR** - Loads the 8th Wall Engine Binary on Android and iOS so mobile behavior stays consistent
 - **Persistent Objects** - Placed objects stay anchored in world space
 - **Real-time Feedback** - Visual reticle shows where objects will be placed
 - **Scene Controls** - Clear all placed objects from the UI or by saying "clear"
@@ -55,8 +55,9 @@ Speak a combination of **color** + **object**:
 - Same WiFi network for local development testing
 
 ### Not Supported
-- In browsers without immersive WebXR, the app attempts to start the 8th Wall fallback.
-- 8th Wall fallback requires camera access, HTTPS, and network access to load the 8th Wall engine scripts.
+- On Android and iOS, the app uses the 8th Wall AR engine for consistent behavior across devices.
+- 8th Wall mode requires camera access, HTTPS, and network access to load the 8th Wall engine scripts.
+- On non-mobile devices, the app uses WebXR when immersive AR is available and falls back to 8th Wall otherwise.
 - If both WebXR and 8th Wall fail, the app shows the setup guidance screen.
 
 ## Getting Started
@@ -111,8 +112,8 @@ Output is generated in the `dist/` folder.
 ## Tech Stack
 
 - **Three.js** (r152) - 3D rendering, bundled for PWA reliability
-- **WebXR Device API** - AR session and hit-testing
-- **8th Wall Engine Binary** - Fallback SLAM/world tracking path for browsers without immersive WebXR
+- **8th Wall Engine Binary** - Unified mobile SLAM/world tracking path for Android and iOS
+- **WebXR Device API** - Non-mobile AR session and hit-testing when supported
 - **Web Speech API** - Voice recognition
 - **Webpack 5** - Bundling and dev server
 - **Service Worker + Web App Manifest** - Installable app shell and offline cache
@@ -163,13 +164,13 @@ web-xr/
 
 | Issue | Solution |
 |-------|----------|
-| "WebXR API not available" | The app will try 8th Wall fallback |
-| "Immersive AR not supported" | The app will try 8th Wall fallback; on Android, also install Google Play Services for AR for native WebXR |
+| "WebXR API not available" | The app will try 8th Wall mode |
+| "Immersive AR not supported" | The app will try 8th Wall mode |
 | "Page must be loaded over HTTPS" | Use the `https://` URL, not `http://` |
 | Security certificate warning | Tap "Advanced" → "Proceed" (safe for local dev) |
 | No reticle appearing | Point camera at a well-lit flat surface |
 | Voice not recognized | Speak clearly, try "gray elephant" or "blue bird" |
-| iOS WebXR not working | Expected; the app uses 8th Wall fallback when available |
+| iOS WebXR not working | Expected; mobile devices use 8th Wall mode |
 
 ## License
 

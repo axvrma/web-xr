@@ -16,6 +16,7 @@ let fallbackRaycaster = null;
 let fallbackPlacementPoint = null;
 
 const placedObjects = [];
+const EIGHT_WALL_OBJECT_SCALE = 2.15;
 const EIGHT_WALL_SCRIPTS = [
     {
         src: 'https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js',
@@ -101,19 +102,24 @@ async function init() {
         return;
     }
 
+    if (shouldUseUnifiedEightWall()) {
+        enableEightWallMode('Unified AR mode ready.');
+        return;
+    }
+
     if (!navigator.xr) {
-        enableEightWallFallback('WebXR is not available in this browser.');
+        enableEightWallMode('WebXR is not available in this browser.');
         return;
     }
 
     try {
         const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
         if (!isARSupported) {
-            enableEightWallFallback('Immersive WebXR AR is not supported on this device.');
+            enableEightWallMode('Immersive WebXR AR is not supported on this device.');
             return;
         }
     } catch (error) {
-        enableEightWallFallback('WebXR support check failed: ' + error.message);
+        enableEightWallMode('WebXR support check failed: ' + error.message);
         return;
     }
 
@@ -123,9 +129,14 @@ async function init() {
     startARBtn.disabled = false;
 }
 
-function enableEightWallFallback(reason) {
+function shouldUseUnifiedEightWall() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function enableEightWallMode(reason) {
     arEngine = '8thwall';
-    statusEl.textContent = `${reason} 8th Wall fallback is ready.`;
+    statusEl.textContent = `${reason} Tap Start AR to begin.`;
     startARBtn.disabled = false;
 }
 
@@ -252,6 +263,7 @@ function createFallbackReticle() {
     reticle.matrixAutoUpdate = true;
     reticle.position.set(0, 0, -1.2);
     reticle.quaternion.identity();
+    reticle.scale.setScalar(1.35);
     reticle.visible = true;
     reticleVisible = true;
 }
@@ -444,7 +456,7 @@ function createEightWallScenePipelineModule() {
 
             eightWallStarted = true;
             showActiveARControls();
-            statusEl.textContent = '8th Wall AR ready. Aim at the floor, then speak an object.';
+            statusEl.textContent = 'AR ready. Aim at the floor, then speak an object.';
         },
         onUpdate: () => {
             updateFallbackReticle();
@@ -679,11 +691,12 @@ function placeObject(color, objectType) {
     if (arEngine === '8thwall') {
         object.position.copy(reticle.position);
         object.quaternion.copy(reticle.quaternion);
+        object.scale.multiplyScalar(EIGHT_WALL_OBJECT_SCALE);
     } else {
         reticle.matrix.decompose(object.position, object.quaternion, object.scale);
     }
 
-    object.position.y += object.userData.groundOffset || 0.08;
+    object.position.y += (object.userData.groundOffset || 0.08) * object.scale.y;
     object.rotation.y += Math.random() * Math.PI * 2;
     initializeAnimationState(object);
 
