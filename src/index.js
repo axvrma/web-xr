@@ -52,6 +52,7 @@ const OBJECT_LIBRARY = {
 const startARBtn = document.getElementById('start-ar-btn');
 const micBtn = document.getElementById('mic-btn');
 const clearBtn = document.getElementById('clear-btn');
+const infoBtn = document.getElementById('info-btn');
 const installAppBtn = document.getElementById('install-app-btn');
 const statusEl = document.getElementById('status');
 const transcriptEl = document.getElementById('transcript');
@@ -59,6 +60,7 @@ const instructionsEl = document.getElementById('instructions');
 const objectCountEl = document.getElementById('object-count');
 const notSupportedEl = document.getElementById('not-supported');
 const notSupportedReasonEl = document.getElementById('not-supported-reason');
+let instructionsTimer = null;
 
 init();
 
@@ -74,6 +76,7 @@ async function init() {
     setupStartButton();
     setupMicButton();
     setupClearButton();
+    setupInfoButton();
     updateObjectCount();
 
     if (isIOS()) {
@@ -147,6 +150,7 @@ function showNotSupported(reason, isIOSDevice = false) {
     startARBtn.classList.add('hidden');
     micBtn.classList.add('hidden');
     clearBtn.classList.add('hidden');
+    infoBtn.classList.add('hidden');
     instructionsEl.classList.add('hidden');
     notSupportedEl.classList.remove('hidden');
     statusEl.textContent = 'AR is unavailable on this device';
@@ -251,7 +255,8 @@ async function startAR() {
         startARBtn.classList.add('hidden');
         micBtn.classList.remove('hidden');
         clearBtn.classList.remove('hidden');
-        instructionsEl.classList.remove('hidden');
+        infoBtn.classList.remove('hidden');
+        hideInstructions();
         statusEl.textContent = 'Scan a surface, then speak an object';
 
         renderer.setAnimationLoop(render);
@@ -270,7 +275,8 @@ function onSessionEnd() {
     startARBtn.classList.remove('hidden');
     micBtn.classList.add('hidden');
     clearBtn.classList.add('hidden');
-    instructionsEl.classList.add('hidden');
+    infoBtn.classList.add('hidden');
+    hideInstructions();
     statusEl.textContent = 'AR session ended. Tap Start AR to resume.';
 
     renderer.setAnimationLoop(null);
@@ -412,6 +418,31 @@ function setupClearButton() {
         clearPlacedObjects();
         statusEl.textContent = 'Scene cleared';
     });
+}
+
+function setupInfoButton() {
+    infoBtn.addEventListener('click', () => {
+        showInstructionsFor15Seconds();
+    });
+}
+
+function showInstructionsFor15Seconds() {
+    window.clearTimeout(instructionsTimer);
+    instructionsEl.classList.remove('hidden');
+    infoBtn.classList.add('active');
+    infoBtn.setAttribute('aria-expanded', 'true');
+
+    instructionsTimer = window.setTimeout(() => {
+        hideInstructions();
+    }, 15000);
+}
+
+function hideInstructions() {
+    window.clearTimeout(instructionsTimer);
+    instructionsTimer = null;
+    instructionsEl.classList.add('hidden');
+    infoBtn.classList.remove('active');
+    infoBtn.setAttribute('aria-expanded', 'false');
 }
 
 function parseCommand(command) {
