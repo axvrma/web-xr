@@ -14,8 +14,20 @@ let eightWallStarted = false;
 let fallbackGroundPlane = null;
 let fallbackRaycaster = null;
 let fallbackPlacementPoint = null;
+let fallbackReticleTarget = null;
+let fallbackReticleStable = null;
+let fallbackReticleReady = false;
+let fallbackHitStreak = 0;
+let fallbackLastGoodHitAt = 0;
 
 const placedObjects = [];
+const EIGHT_WALL_OBJECT_SCALE = 2.15;
+const FALLBACK_RETICLE_LERP = 0.18;
+const FALLBACK_RETICLE_TARGET_LERP = 0.32;
+const FALLBACK_RETICLE_JUMP_LERP = 0.07;
+const FALLBACK_RETICLE_JUMP_DISTANCE = 0.55;
+const FALLBACK_RETICLE_HOLD_MS = 450;
+const FALLBACK_RETICLE_MIN_HITS = 3;
 const EIGHT_WALL_SCRIPTS = [
     {
         src: 'https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js',
@@ -101,19 +113,24 @@ async function init() {
         return;
     }
 
+    if (shouldUseUnifiedEightWall()) {
+        enableEightWallMode('Unified AR mode ready.');
+        return;
+    }
+
     if (!navigator.xr) {
-        enableEightWallFallback('WebXR is not available in this browser.');
+        enableEightWallMode('WebXR is not available in this browser.');
         return;
     }
 
     try {
         const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
         if (!isARSupported) {
-            enableEightWallFallback('Immersive WebXR AR is not supported on this device.');
+            enableEightWallMode('Immersive WebXR AR is not supported on this device.');
             return;
         }
     } catch (error) {
-        enableEightWallFallback('WebXR support check failed: ' + error.message);
+        enableEightWallMode('WebXR support check failed: ' + error.message);
         return;
     }
 
@@ -123,9 +140,14 @@ async function init() {
     startARBtn.disabled = false;
 }
 
-function enableEightWallFallback(reason) {
+function shouldUseUnifiedEightWall() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function enableEightWallMode(reason) {
     arEngine = '8thwall';
-    statusEl.textContent = `${reason} 8th Wall fallback is ready.`;
+    statusEl.textContent = `${reason} Tap Start AR to begin.`;
     startARBtn.disabled = false;
 }
 
@@ -252,6 +274,7 @@ function createFallbackReticle() {
     reticle.matrixAutoUpdate = true;
     reticle.position.set(0, 0, -1.2);
     reticle.quaternion.identity();
+    reticle.scale.setScalar(1.35);
     reticle.visible = true;
     reticleVisible = true;
 }
@@ -260,6 +283,11 @@ function setupFallbackPlacement() {
     fallbackGroundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     fallbackRaycaster = new THREE.Raycaster();
     fallbackPlacementPoint = new THREE.Vector3(0, 0, -1.2);
+    fallbackReticleTarget = new THREE.Vector3(0, 0, -1.2);
+    fallbackReticleStable = new THREE.Vector3(0, 0, -1.2);
+    fallbackReticleReady = false;
+    fallbackHitStreak = 0;
+    fallbackLastGoodHitAt = 0;
 
     const shadowGeometry = new THREE.PlaneGeometry(2000, 2000);
     shadowGeometry.rotateX(-Math.PI / 2);
@@ -277,18 +305,42 @@ function updateFallbackReticle() {
 
     fallbackRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
     const didIntersect = fallbackRaycaster.ray.intersectPlane(fallbackGroundPlane, fallbackPlacementPoint);
+    const now = performance.now();
 
     if (!didIntersect) {
-        const fallbackDirection = new THREE.Vector3();
-        camera.getWorldDirection(fallbackDirection);
-        fallbackPlacementPoint.copy(camera.position).add(fallbackDirection.multiplyScalar(1.4));
-        fallbackPlacementPoint.y = 0;
+        fallbackHitStreak = 0;
+
+        if (now - fallbackLastGoodHitAt > FALLBACK_RETICLE_HOLD_MS) {
+            reticle.visible = false;
+            reticleVisible = false;
+        }
+        return;
     }
 
-    reticle.position.copy(fallbackPlacementPoint);
-    reticle.rotation.set(0, 0, 0);
+    fallbackLastGoodHitAt = now;
+    fallbackHitStreak += 1;
+
+    if (!fallbackReticleReady) {
+        fallbackReticleTarget.copy(fallbackPlacementPoint);
+        fallbackReticleStable.copy(fallbackPlacementPoint);
+        reticle.position.copy(fallbackPlacementPoint);
+        fallbackReticleReady = true;
+    } else {
+        const targetDistance = fallbackReticleTarget.distanceTo(fallbackPlacementPoint);
+        const targetLerp = targetDistance > FALLBACK_RETICLE_JUMP_DISTANCE
+            ? FALLBACK_RETICLE_JUMP_LERP
+            : FALLBACK_RETICLE_TARGET_LERP;
+
+        fallbackReticleTarget.lerp(fallbackPlacementPoint, targetLerp);
+        fallbackReticleStable.lerp(fallbackReticleTarget, FALLBACK_RETICLE_LERP);
+        reticle.position.copy(fallbackReticleStable);
+    }
+
+    reticle.rotation.x = 0;
+    reticle.rotation.y = 0;
+    reticle.rotation.z = 0;
     reticle.visible = true;
-    reticleVisible = true;
+    reticleVisible = fallbackHitStreak >= FALLBACK_RETICLE_MIN_HITS;
 }
 
 function setupStartButton() {
@@ -444,7 +496,7 @@ function createEightWallScenePipelineModule() {
 
             eightWallStarted = true;
             showActiveARControls();
-            statusEl.textContent = '8th Wall AR ready. Aim at the floor, then speak an object.';
+            statusEl.textContent = 'AR ready. Aim at the floor, then speak an object.';
         },
         onUpdate: () => {
             updateFallbackReticle();
@@ -672,18 +724,19 @@ function parseCommand(command) {
 }
 
 function placeObject(color, objectType) {
-    if (!reticle.visible) return;
+    if (!reticle.visible || !reticleVisible) return;
 
     const object = createObject(color, objectType);
 
     if (arEngine === '8thwall') {
         object.position.copy(reticle.position);
         object.quaternion.copy(reticle.quaternion);
+        object.scale.multiplyScalar(EIGHT_WALL_OBJECT_SCALE);
     } else {
         reticle.matrix.decompose(object.position, object.quaternion, object.scale);
     }
 
-    object.position.y += object.userData.groundOffset || 0.08;
+    object.position.y += (object.userData.groundOffset || 0.08) * object.scale.y;
     object.rotation.y += Math.random() * Math.PI * 2;
     initializeAnimationState(object);
 
